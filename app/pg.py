@@ -26,8 +26,11 @@ _pool: ConnectionPool | None = None
 def pool() -> ConnectionPool:
     global _pool
     if _pool is None:
+        # check= validates connections at checkout, so a DB restart costs a
+        # reconnect instead of one failed request per stale pooled conn.
         _pool = ConnectionPool(DATABASE_URL, min_size=1, max_size=5,
-                               kwargs={"row_factory": dict_row}, open=True)
+                               kwargs={"row_factory": dict_row}, open=True,
+                               check=ConnectionPool.check_connection)
     return _pool
 
 
