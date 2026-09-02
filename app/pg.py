@@ -139,7 +139,9 @@ def update_record_sealed(*, record_id: str, sealed_at: str,
                          fp_seconds: float, coherence: dict, sameorigin: dict,
                          master_sha: str, release_master_sha: str,
                          project_sha: str, manifest: dict,
-                         cert_subject: str, signed_asset_path: str) -> None:
+                         cert_subject: str, signed_asset_path: str,
+                         manifest_s3_key: str | None = None,
+                         manifest_public_url: str | None = None) -> None:
     with pool().connection() as conn:
         conn.execute(
             """update records set
@@ -151,6 +153,7 @@ def update_record_sealed(*, record_id: str, sealed_at: str,
                  sameorigin_report = %s, red_flags = %s,
                  master_sha256 = %s, release_master_sha256 = %s,
                  project_sha256 = %s, manifest = %s, cert_subject = %s,
+                 manifest_s3_key = %s, manifest_public_url = %s,
                  sealed_at = %s, meta = meta || %s
                where id = %s""",
             (selfcheck, pack_fingerprint(fp_raw), fp_seconds,
@@ -158,8 +161,34 @@ def update_record_sealed(*, record_id: str, sealed_at: str,
              sameorigin["score"], sameorigin["band"].upper(),
              Jsonb(sameorigin), Jsonb(sameorigin.get("red_flags", [])),
              master_sha, release_master_sha, project_sha,
-             Jsonb(manifest), cert_subject, sealed_at,
+             Jsonb(manifest), cert_subject,
+             manifest_s3_key, manifest_public_url, sealed_at,
              Jsonb({"signed_asset_path": signed_asset_path}), record_id))
+
+
+def insert_asset(*, owner_user_id: str | None, record_id: str, kind: str,
+                 bucket: str, key: str, position: int = 0,
+                 status: str = "ATTACHED", original_filename: str | None = None,
+                 content_type: str | None = None, size_bytes: int | None = None,
+                 sha256: str | None = None) -> None:
+    with pool().connection() as conn:
+        conn.execute(
+            """insert into assets (owner_user_id, record_id, kind, position,
+                                   status, s3_bucket, s3_key,
+                                   original_filename, content_type,
+                                   size_bytes, sha256)
+               values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+               on conflict (s3_bucket, s3_key) do nothing""",
+            (owner_user_id, record_id, kind, position, status, bucket, key,
+             original_filename, content_type, size_bytes, sha256))
+
+
+def mark_record_assets_attached(record_id: str) -> None:
+    with pool().connection() as conn:
+        conn.execute(
+            """update assets set status = 'ATTACHED'
+                where record_id = %s and status = 'UPLOADED'""",
+            (record_id,))
 
 
 # ---------------------------------------------------------------------------
