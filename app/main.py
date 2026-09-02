@@ -47,7 +47,7 @@ def check_prerequisites() -> None:
 check_prerequisites()
 
 app = FastAPI(
-    title="MotherTape Odin (verify)",
+    title="SessionSeal Odin (verify)",
     description=(
         "Tamper-evident, timestamped records of a master, its stems, and its "
         "project file. Records prove custody, integrity, coherence, and "

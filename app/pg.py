@@ -1,9 +1,9 @@
-"""Postgres access shared by the MotherTape services.
+"""Postgres access shared by the SessionSeal services.
 
 This module is duplicated (identical) in heimdall, odin, and thor — the
 services are separate repos and the file is small; keep edits in sync.
 Connection comes from the service's .env (DATABASE_URL). Until auth
-exists, records are owned by a seed user (poc@mothertape.local).
+exists, records are owned by a seed user (poc@sessionseal.local).
 """
 
 import os
@@ -18,7 +18,7 @@ from psycopg_pool import ConnectionPool
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 DATABASE_URL = os.environ["DATABASE_URL"]
-POC_USER_EMAIL = "poc@mothertape.local"
+POC_USER_EMAIL = "poc@sessionseal.local"
 
 _pool: ConnectionPool | None = None
 
