@@ -6,11 +6,13 @@ a watermark hit must be corroborated by the record's own fingerprint
 similarity, else not linked. Read-only against Postgres.
 """
 
+import hashlib
 import json
 import os
 import re
 import subprocess
 import tempfile
+import time
 from pathlib import Path
 
 from . import audio, fingerprint, pg
@@ -57,7 +59,9 @@ def record_public(row) -> dict:
     }
 
 
-def link(data: bytes, filename: str) -> dict:
+def link(data: bytes, filename: str, source: str = "WEB",
+         ip: str | None = None, user_agent: str | None = None) -> dict:
+    t0 = time.monotonic()
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         raw = tmp / (Path(filename or "audio").name or "audio")
@@ -114,6 +118,58 @@ def link(data: bytes, filename: str) -> dict:
             wm_record = None
 
     linked = wm_record or fp_record
+
+    mechanisms_out = {
+        "watermark": {
+            "detected": wm_record is not None or copy_attack_suspected,
+            "payload_hex": wm_hex,
+            "score": round(wm_score, 2) if wm_score > 0 else None,
+            "matched_registered_record": wm_record is not None,
+            "fingerprint_corroboration":
+                round(wm_corroboration, 4)
+                if wm_corroboration is not None else None,
+            "note": None if wm_record else
+                    "payload matches a registered record, but the audio "
+                    "does not match that record's fingerprint -- "
+                    "consistent with a copied/transplanted watermark; "
+                    "not linked" if copy_attack_suspected else
+                    "no registered record carries this payload"
+                    if wm_hex and wm_score >= AW_SCORE_THRESHOLD else
+                    "no confident watermark pattern found",
+        },
+        "fingerprint": {
+            "best_similarity": round(best_sim, 4),
+            "threshold": FP_LINK_THRESHOLD,
+            "matched": fp_record is not None,
+        },
+        "c2pa": c2pa,
+    }
+
+    # Append-only audit log — a failed insert must never fail verification.
+    try:
+        pg.insert_verification(
+            source=source,
+            upload_filename=Path(filename or "audio").name,
+            upload_sha256=hashlib.sha256(data).hexdigest(),
+            linked=linked is not None,
+            linked_via=("WATERMARK" if wm_record
+                        else "FINGERPRINT" if fp_record else None),
+            matched_record_id=linked["id"] if linked is not None else None,
+            copy_attack_suspected=copy_attack_suspected,
+            watermark_found=bool(wm_hex and wm_score >= AW_SCORE_THRESHOLD),
+            watermark_payload=wm_hex,
+            watermark_score=round(wm_score, 3) if wm_score > 0 else None,
+            watermark_corroboration=wm_corroboration,
+            fingerprint_best_similarity=round(best_sim, 4),
+            c2pa_manifest_present=c2pa.get("manifest_present"),
+            c2pa_validation_state=c2pa.get("validation_state"),
+            mechanisms=mechanisms_out,
+            records_scanned=len(rows),
+            duration_ms=int((time.monotonic() - t0) * 1000),
+            ip=ip, user_agent=user_agent)
+    except Exception as e:
+        print(f"[odin] verification log failed: {e}", flush=True)
+
     return {
         "linked": linked is not None,
         "linked_via": ("watermark (exact id, fingerprint-corroborated)"
@@ -121,30 +177,6 @@ def link(data: bytes, filename: str) -> dict:
                        else "fingerprint similarity" if fp_record else None),
         "record": record_public(linked) if linked is not None else None,
         "copy_attack_suspected": copy_attack_suspected,
-        "mechanisms": {
-            "watermark": {
-                "detected": wm_record is not None or copy_attack_suspected,
-                "payload_hex": wm_hex,
-                "score": round(wm_score, 2) if wm_score > 0 else None,
-                "matched_registered_record": wm_record is not None,
-                "fingerprint_corroboration":
-                    round(wm_corroboration, 4)
-                    if wm_corroboration is not None else None,
-                "note": None if wm_record else
-                        "payload matches a registered record, but the audio "
-                        "does not match that record's fingerprint -- "
-                        "consistent with a copied/transplanted watermark; "
-                        "not linked" if copy_attack_suspected else
-                        "no registered record carries this payload"
-                        if wm_hex and wm_score >= AW_SCORE_THRESHOLD else
-                        "no confident watermark pattern found",
-            },
-            "fingerprint": {
-                "best_similarity": round(best_sim, 4),
-                "threshold": FP_LINK_THRESHOLD,
-                "matched": fp_record is not None,
-            },
-            "c2pa": c2pa,
-        },
+        "mechanisms": mechanisms_out,
         "registered_records": len(rows),
     }

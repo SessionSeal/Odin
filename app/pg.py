@@ -219,3 +219,36 @@ def record_manifest(record_id: str) -> dict | None:
                 where id = %s and deleted_at is null""",
             (record_id,)).fetchone()
     return row
+
+
+def insert_verification(*, source: str, upload_filename: str | None,
+                        upload_sha256: str | None, linked: bool,
+                        linked_via: str | None, matched_record_id: str | None,
+                        copy_attack_suspected: bool, watermark_found: bool,
+                        watermark_payload: str | None,
+                        watermark_score: float | None,
+                        watermark_corroboration: float | None,
+                        fingerprint_best_similarity: float | None,
+                        c2pa_manifest_present: bool | None,
+                        c2pa_validation_state: str | None,
+                        mechanisms: dict, records_scanned: int,
+                        duration_ms: int, ip: str | None,
+                        user_agent: str | None) -> None:
+    """Append-only log of a /product/link attempt (used by odin)."""
+    with pool().connection() as conn:
+        conn.execute(
+            """insert into verifications
+                 (source, upload_filename, upload_sha256, linked, linked_via,
+                  matched_record_id, copy_attack_suspected, watermark_found,
+                  watermark_payload, watermark_score, watermark_corroboration,
+                  fingerprint_best_similarity, c2pa_manifest_present,
+                  c2pa_validation_state, mechanisms, records_scanned,
+                  duration_ms, ip, user_agent)
+               values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                       %s, %s, %s, %s, %s, %s)""",
+            (source, upload_filename, upload_sha256, linked, linked_via,
+             matched_record_id, copy_attack_suspected, watermark_found,
+             watermark_payload, watermark_score, watermark_corroboration,
+             fingerprint_best_similarity, c2pa_manifest_present,
+             c2pa_validation_state, Jsonb(mechanisms), records_scanned,
+             duration_ms, ip, user_agent))

@@ -15,7 +15,7 @@ import zipfile
 from pathlib import Path
 
 import soundfile as sf
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 
@@ -400,7 +400,7 @@ async def check_logic_master(
 
 
 @app.post("/product/link")
-async def product_link(audio_file: UploadFile = File(...)):
+async def product_link(request: Request, audio_file: UploadFile = File(...)):
     """Link any audio copy back to a registered record.
 
     Tries audiowmark payload (exact), chromaprint similarity (fuzzy), and
@@ -408,7 +408,11 @@ async def product_link(audio_file: UploadFile = File(...)):
     """
     data = await audio_file.read()
     try:
-        return verify.link(data, audio_file.filename or "audio")
+        return verify.link(
+            data, audio_file.filename or "audio",
+            ip=request.headers.get("x-forwarded-for",
+                                   request.client.host if request.client else None),
+            user_agent=request.headers.get("user-agent"))
     except RuntimeError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
