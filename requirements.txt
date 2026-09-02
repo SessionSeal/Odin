@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+python-multipart
+soundfile
+numpy
+psycopg[binary,pool]
+python-dotenv
