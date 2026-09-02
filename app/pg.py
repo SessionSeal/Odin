@@ -201,7 +201,8 @@ def sealed_records() -> list[dict]:
         rows = conn.execute(
             """select id, artist_name, sealed_at, watermark_payload,
                       fingerprint, coherence_verified, coherence_confidence,
-                      sameorigin_score, sameorigin_band, cert_subject
+                      sameorigin_score, sameorigin_band, cert_subject,
+                      manifest_public_url
                  from records
                 where status = 'SEALED' and deleted_at is null""").fetchall()
     for r in rows:

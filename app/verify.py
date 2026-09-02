@@ -54,6 +54,7 @@ def record_public(row) -> dict:
         "same_origin": {"score": float(row["sameorigin_score"]),
                         "band": (row["sameorigin_band"] or "").lower()},
         "signer": {"cert_subject": row["cert_subject"], "self_attested": True},
+        "manifest_url": row.get("manifest_public_url"),
         "proves": "custody, integrity, coherence, priority",
         "does_not_prove": "authorship",
     }
